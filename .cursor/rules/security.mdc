@@ -1,0 +1,10 @@
+---
+description: Apply when writing or refactoring logic in src/
+globs: src/**/*.py
+---
+# Security Standards
+- NEVER use `assert` for production logic; use `if not condition: raise ValueError()`.
+- All functions must have Type Hints (Python 3.12+ syntax).
+- Check for hardcoded secrets (Gitleaks compliance).
+- When adding libraries, run `pip-audit` to verify the supply chain.
+- If a security vulnerability is found, STOP and report it.

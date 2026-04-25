@@ -1,0 +1,61 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+        # Safety CLI rewrites this file; EOF normalization fights `safety scan` and blocks commits.
+        exclude: ^\.safety-project\.ini$
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+
+  - repo: local
+    hooks:
+      - id: bandit
+        name: bandit
+        entry: bandit
+        language: python
+        additional_dependencies: [bandit==1.8.6]
+        types: [python]
+        files: ^src/
+        args: ["-v" , "-ll"]
+
+      - id: pip-audit
+        name: pip-audit
+        entry: pip-audit
+        language: python
+        additional_dependencies: [pip-audit==2.9.0]
+        pass_filenames: false
+        always_run: true
+
+      # safety scan rewrites .safety-project.ini; pre-commit treats that as a failed commit.
+      # Run Safety in CI instead: .github/workflows/pipeline.yml and safety_scan.yml
+
+      - id: pytest-cov
+        name: pytest-cov
+        entry: pytest --cov=src --cov-fail-under=85
+        language: python
+        additional_dependencies:
+          - pytest==8.4.2
+          - pytest-cov==7.0.0
+          - fastapi==0.115.14
+          - pydantic==2.12.2
+          - email-validator==2.3.0
+          - httpx==0.28.1
+          - cryptography==46.0.3
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/bridgecrewio/checkov.git
+    rev: 3.2.523
+    hooks:
+      - id: checkov
+        verbose: true
+        # We point it specifically to the infra folder to keep it fast
+        args: [-d, infra]

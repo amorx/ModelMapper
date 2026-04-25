@@ -1,0 +1,232 @@
+name: Secure-CI-Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  issues: write  # ZAP needs this to create the report issue
+  pull-requests: write
+
+jobs:
+  # GATE 1: STATIC ANALYSIS & SECURITY
+  lint-and-shield:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Tools
+        run: pip install ruff bandit
+
+      - name: Code Cleanliness (Ruff)
+        run: ruff check .
+
+      - name: Security Audit (Bandit)
+        ##run: bandit -r . -ll # Only fail on medium/high severity
+        run: bandit -r src/ -v
+
+      - name: Check for vulnerable dependencies
+        env:
+          SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
+        run: |
+          pip install safety
+          safety --key "$SAFETY_API_KEY" scan
+
+  # GATE 2: LEGAL CHECKS
+  legal-licenses-checks:
+    needs: lint-and-shield  # 🛑 Don't run tests if code is messy/insecure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' #saves time per run
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: License Compliance Check
+        run: |
+          pip-licenses --summary
+          #pip-licenses --allow-only "MIT" "MIT License" "Apache Software License" "Apache-2.0" "BSD-2-Clause" "Apache-2.0 OR BSD-2-Clause" "Python" --partial-match
+          pip-licenses --allow-only "MIT;Apache;BSD;Python;ISC;PSF;Unlicense;MPL 2.0;Mozilla Public License 2.0 (MPL 2.0)" --partial-match
+
+      - name: Generate SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py requirements requirements.txt --output-format json --output-file bom.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-bill-of-materials
+          path: bom.json
+
+  # GATE 3: LOGIC & COVERAGE
+  logic-and-coverage:
+    needs: legal-licenses-checks  # 🛑 Don't run tests if libraries cannot be used
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' #saves time per run
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run Tests with 100% Coverage
+        env:
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        run: |
+          export PYTHONPATH=$PYTHONPATH:$(pwd)
+          pytest --cov=src --cov-report=term-missing --cov-fail-under=100
+
+      - name: Generate HTML Report
+        run: pytest --cov=src --cov-report=html
+
+      - name: Upload Coverage Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage-report
+          path: htmlcov/
+
+  # GATE 4: Keys check
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Scans the entire history, not just the latest commit
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # GATE 5: DOCKER LINTING
+  docker-lint:
+    name: Docker Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Dockerfile (Hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          # Fail on style/info so the gate is strict
+          failure-threshold: info
+
+  # GATE 6: INFRASTRUCTURE SCAN
+  infra-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkov GitHub Action
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ./infra # Points to your infrastructure folder
+          framework: terraform
+          soft_fail: false # Block the PR if infra is insecure
+
+  # GATE 7: INFRASTRUCTURE SECURITY SCAN
+  infra-security-scan:
+    needs: infra-scan  # 🛑 Don't run tests if infra checks fail
+    name: "Infrastructure Security Audit"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ./infra
+          framework: terraform
+          # This ensures the pipeline blocks if you have high-risk infra flaws
+          quiet: true
+          soft_fail: false
+          download_external_modules: true
+
+  # GATE 8: DAST SCAN
+  dast-scan:
+    name: "Dynamic Security Scan (ZAP)"
+    runs-on: ubuntu-latest
+    needs: [docker-lint] # Only run if the container is built correctly
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build and Start Vault
+        run: |
+          docker build -t secure-vault .
+          ##docker run -d -p 8080:8080 --name vault-app secure-vault
+          ##sleep 5 # Give the app a few seconds to wake up
+          # Run with --network host so it actually sits on localhost:8080
+          docker run -d --network host --name vault-app secure-vault
+
+          # Health check: Wait until the app actually responds
+          ##timeout 30s sh -c 'until curl -s http://localhost:8080; do sleep 1; done'
+
+          echo "Waiting for app to wake up..."
+          # If this fails, we print the logs so we can see the Python error
+          if ! timeout 40s sh -c 'until curl -s http://localhost:8080 > /dev/null; do echo "Still waiting..."; sleep 2; done'; then
+            echo "❌ App failed to start in time. Printing logs:"
+            docker logs vault-app
+            exit 1
+          fi
+
+  # NEW: Fix permissions for the ZAP container
+      - name: Prepare ZAP workspace
+        run: |
+          touch zap.yaml
+          touch report-json.json report-md.md report-html.html
+          mkdir -p .zap
+          printf "10049\tIGNORE\tFalse positive: app enforces no-store headers in middleware\n" > .zap/rules.tsv
+          chmod -R 777 . # Grant full access to the workspace for the ZAP user
+
+      - name: Debug DAST Headers and Rules
+        run: |
+          echo "===== ZAP rules file ====="
+          cat .zap/rules.tsv
+          echo "===== Response headers ====="
+          for url in http://localhost:8080 http://localhost:8080/ http://localhost:8080/robots.txt http://localhost:8080/sitemap.xml; do
+            echo "--- $url ---"
+            curl -sSI "$url" | tr -d '\r'
+          done
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8080'
+          rules_file_name: '.zap/rules.tsv'
+          # CRITICAL: Set this to false to stop the action from
+          # trying to upload the "zap_scan" artifact itself.
+          artifact_name: 'zap-scan'
+          # This generates a report and creates a GitHub Issue if it finds flaws
+          fail_action: true
+
+      - name: Upload ZAP Security Report
+        uses: actions/upload-artifact@v4
+        if: always() # Ensure this runs even if ZAP finds alerts
+        with:
+          name: vault-security-audit-report
+          path: |
+            report_html.html
+            report_md.md
+          retention-days: 5
