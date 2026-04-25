@@ -1,4 +1,4 @@
-name: Secure-CI-Pipeline
+name: ModelMapper-CI-Pipeline
 
 on:
   push:
@@ -172,22 +172,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Build and Start Vault
+      - name: Build and Start ModelMapper
         run: |
-          docker build -t secure-vault .
-          ##docker run -d -p 8080:8080 --name vault-app secure-vault
+          docker build -t modelmapper .
+          ##docker run -d -p 8080:8080 --name modelmapper-app modelmapper
           ##sleep 5 # Give the app a few seconds to wake up
           # Run with --network host so it actually sits on localhost:8080
-          docker run -d --network host --name vault-app secure-vault
+          docker run -d --network host --name modelmapper-app modelmapper
 
           # Health check: Wait until the app actually responds
-          ##timeout 30s sh -c 'until curl -s http://localhost:8080; do sleep 1; done'
+          ##timeout 30s sh -c 'until curl -s http://localhost:8080/healthz; do sleep 1; done'
 
           echo "Waiting for app to wake up..."
           # If this fails, we print the logs so we can see the Python error
-          if ! timeout 40s sh -c 'until curl -s http://localhost:8080 > /dev/null; do echo "Still waiting..."; sleep 2; done'; then
+          if ! timeout 40s sh -c 'until curl -s http://localhost:8080/healthz > /dev/null; do echo "Still waiting..."; sleep 2; done'; then
             echo "❌ App failed to start in time. Printing logs:"
-            docker logs vault-app
+            docker logs modelmapper-app
             exit 1
           fi
 
@@ -205,7 +205,7 @@ jobs:
           echo "===== ZAP rules file ====="
           cat .zap/rules.tsv
           echo "===== Response headers ====="
-          for url in http://localhost:8080 http://localhost:8080/ http://localhost:8080/robots.txt http://localhost:8080/sitemap.xml; do
+          for url in http://localhost:8080/healthz http://localhost:8080/ http://localhost:8080/robots.txt http://localhost:8080/sitemap.xml; do
             echo "--- $url ---"
             curl -sSI "$url" | tr -d '\r'
           done
@@ -225,7 +225,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always() # Ensure this runs even if ZAP finds alerts
         with:
-          name: vault-security-audit-report
+          name: modelmapper-security-audit-report
           path: |
             report_html.html
             report_md.md

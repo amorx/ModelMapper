@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Run History</h2>
+<p class="metric">Total: {{ summary.total_runs }}</p>
+<p class="metric">Completed: {{ summary.completed_runs }}</p>
+<p class="metric">Average Latency: {{ summary.average_latency_ms }} ms</p>
+<table>
+  <tr><th>ID</th><th>Prompt</th><th>Model</th><th>Status</th><th>Latency</th><th>Tokens</th><th>Accuracy</th></tr>
+  {% for run in runs %}
+  <tr>
+    <td>{{ run.id }}</td>
+    <td>{{ run.task_goal }}</td>
+    <td>{{ run.model_display_name }}</td>
+    <td>{{ run.status }}</td>
+    <td>{{ run.total_latency_ms or "" }}</td>
+    <td>{{ run.tokens_in }}/{{ run.tokens_out }}</td>
+    <td>{{ run.accuracy_score or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

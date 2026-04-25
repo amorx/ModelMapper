@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block page_header %}
+<header class="page">
+  <div>
+    <h2 class="page__title">Benchmarks</h2>
+    <p class="page__lede">Run a full prompt set across models with a parameter sweep. Results are grouped by session with pass-rate and cost rollups. Max runs per launch: {{ max_runs }} (override with MODELMAPPER_BENCHMARK_MAX_RUNS).</p>
+  </div>
+  <div class="page__actions">
+    <a class="btn" href="#launch">New benchmark</a>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+<details class="drawer" id="launch" open>
+  <summary>Launch a benchmark</summary>
+  <div class="drawer__body">
+    <form method="post" action="/benchmarks">
+      <fieldset>
+        <legend>Session</legend>
+        <label>Name <input name="name" value="Benchmark" required></label>
+        <label>Notes <textarea name="notes" rows="2"></textarea></label>
+      </fieldset>
+      <fieldset>
+        <legend>Scope</legend>
+        <label>Prompt set
+          <select name="prompt_set_id" required>
+            {% for ps in prompt_sets %}
+            <option value="{{ ps.id }}">{{ ps.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Models (multi-select, Cmd/Ctrl+click)
+          <select name="model_ids" multiple required size="5">
+            {% for m in models %}
+            <option value="{{ m.id }}">{{ m.display_name }} (id {{ m.id }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Repeat each cell <input name="repeat_count" type="number" min="1" max="20" value="1"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Parameter sweep (JSON array of Ollama option objects)</legend>
+        <p class="help-text">Each object is merged with the model&rsquo;s default params. Example: two temperatures &times; one max output size.</p>
+        <label>
+          <textarea name="sweep_json" class="sweep-editor" rows="6" required spellcheck="false">[
+  {"temperature": 0, "max_tokens": 256},
+  {"temperature": 0.2, "max_tokens": 1024}
+]</textarea>
+        </label>
+      </fieldset>
+      <button type="submit" class="btn btn--primary">Run benchmark</button>
+    </form>
+  </div>
+</details>
+
+<h3>Recent sessions</h3>
+{% if not sessions %}
+<p class="card__meta">No benchmark sessions yet.</p>
+{% else %}
+<table>
+  <tr><th>ID</th><th>Name</th><th>Status</th><th>Scheduled</th><th>Created</th></tr>
+  {% for s in sessions %}
+  <tr>
+    <td class="num"><a href="/benchmarks/{{ s.id }}">{{ s.id }}</a></td>
+    <td>{{ s.name }}</td>
+    <td>{{ s.status }}</td>
+    <td class="num">{{ s.total_scheduled }}</td>
+    <td>{{ s.created_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

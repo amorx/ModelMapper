@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Decision Guide</h2>
+<p>Current recommendation: {{ recommendation.rationale }}</p>
+{% if recommendation.model %}
+<p>Model: {{ recommendation.model.display_name }}</p>
+{% endif %}
+<form method="post" action="/decision-rules">
+  <h3>Add Rule</h3>
+  <label>Priority <input name="priority" type="number" value="10"></label>
+  <label>Task Type <input name="task_type"></label>
+  <label>Speed Priority <input name="speed_priority" type="number" min="1" max="5" value="3"></label>
+  <label>Modality <input name="modality" value="text"></label>
+  <label>Recommended Model
+    <select name="recommended_model_id">
+      {% for model in models %}
+      <option value="{{ model.id }}">{{ model.display_name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Rationale <textarea name="rationale" required></textarea></label>
+  <button type="submit">Add Rule</button>
+</form>
+<table>
+  <tr><th>Priority</th><th>Task</th><th>Model</th><th>Rationale</th></tr>
+  {% for rule in rules %}
+  <tr><td>{{ rule.priority }}</td><td>{{ rule.task_type }}</td><td>{{ rule.recommended_model_id }}</td><td>{{ rule.rationale }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

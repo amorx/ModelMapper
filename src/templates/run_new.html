@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>New Comparison Run</h2>
+<form method="post" action="/runs">
+  <label>Prompt
+    <select name="prompt_id">
+      {% for prompt in prompts %}
+      <option value="{{ prompt.id }}">{{ prompt.category }}: {{ prompt.task_goal }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Models
+    <select name="model_ids" multiple>
+      {% for model in models %}
+      <option value="{{ model.id }}">{{ model.display_name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Parameter Overrides JSON <textarea name="params_json">{}</textarea></label>
+  <button type="submit">Run Comparison</button>
+</form>
+{% endblock %}

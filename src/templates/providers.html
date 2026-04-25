@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Providers</h2>
+<form method="post" action="/providers">
+  <label>Name <input name="display_name" required></label>
+  <label>Kind <input name="provider_kind" value="openai-compatible"></label>
+  <label>Base URL <input name="base_url" value="https://api.openai.com"></label>
+  <label>Endpoint
+    <select name="endpoint_style">
+      <option value="openai_chat">OpenAI Chat</option>
+      <option value="openai_completions">OpenAI Completions</option>
+      <option value="ollama_generate">Ollama Generate</option>
+    </select>
+  </label>
+  <label>Auth
+    <select name="auth_scheme">
+      <option value="none">None</option>
+      <option value="bearer" selected>Bearer</option>
+      <option value="header">Header</option>
+    </select>
+  </label>
+  <label>Key Env Var <input name="api_key_env_var" value="OPENAI_API_KEY"></label>
+  <button type="submit">Add Provider</button>
+</form>
+<table>
+  <tr><th>Name</th><th>Kind</th><th>Base URL</th><th>Endpoint</th><th>Key Source</th><th>Enabled</th></tr>
+  {% for provider in providers %}
+  <tr>
+    <td>{{ provider.display_name }}</td>
+    <td>{{ provider.provider_kind }}</td>
+    <td>{{ provider.base_url }}</td>
+    <td>{{ provider.endpoint_style }}</td>
+    <td>{{ provider.api_key_source }} {{ provider.api_key_env_var }}</td>
+    <td>{{ provider.enabled }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

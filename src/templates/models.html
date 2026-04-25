@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% macro model_form_fields(providers, model=None) -%}
+  {% set provider_id = model.provider_id if model else None %}
+  <fieldset>
+    <legend>Source</legend>
+    <label>Provider
+      <select name="provider_id" data-provider-select required>
+        {% for provider in providers %}
+        <option value="{{ provider.id }}" data-endpoint-style="{{ provider.endpoint_style }}" data-provider-name="{{ provider.display_name }}"
+                {% if provider_id and provider.id == provider_id %}selected{% endif %}>
+          {{ provider.display_name }}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="ollama-picker" data-ollama-picker hidden>
+      <div class="ollama-picker__status">
+        <span class="pill" data-ollama-pill>Idle</span>
+        <button type="button" class="btn btn--ghost" data-ollama-retry hidden>Retry</button>
+        <button type="button" class="btn" data-ollama-sync hidden>Sync all installed</button>
+      </div>
+      <label>Installed Ollama models
+        <select data-ollama-select>
+          <option value="">Choose an installed local model...</option>
+        </select>
+      </label>
+      <p class="help-text" data-ollama-status aria-live="polite">Select an Ollama provider to load installed models.</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Identity</legend>
+    <div class="field-row">
+      <label>Model name
+        <input name="model_name" data-model-name value="{{ model.model_name if model else '' }}" required>
+      </label>
+      <label>Display name
+        <input name="display_name" data-display-name value="{{ model.display_name if model else '' }}" required>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Capabilities</legend>
+    <div class="cluster">
+      <label class="inline-field">
+        <input name="supports_chat" type="checkbox" {% if not model or model.supports_chat %}checked{% endif %}>
+        Chat
+      </label>
+      <label class="inline-field">
+        <input name="supports_tools" type="checkbox" {% if model and model.supports_tools %}checked{% endif %}>
+        Tools
+      </label>
+      <label class="inline-field">
+        <input name="supports_vision" type="checkbox" {% if model and model.supports_vision %}checked{% endif %}>
+        Vision
+      </label>
+      <label class="inline-field">
+        <input name="enabled" type="checkbox" {% if not model or model.enabled %}checked{% endif %}>
+        Enabled
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Cost & limits</legend>
+    <div class="field-row">
+      <label>Context window
+        <input name="context_window" type="number" min="0" value="{{ model.context_window if model else 8192 }}">
+      </label>
+      <label>Input cost / 1K
+        <input name="input_cost_per_1k" type="number" step="0.000001" min="0" value="{{ model.input_cost_per_1k if model else 0 }}">
+      </label>
+      <label>Output cost / 1K
+        <input name="output_cost_per_1k" type="number" step="0.000001" min="0" value="{{ model.output_cost_per_1k if model else 0 }}">
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Metadata</legend>
+    <label>Default params (JSON)
+      <textarea name="default_params" spellcheck="false">{{ model.default_params if model else '{}' }}</textarea>
+    </label>
+    <label>Privacy notes
+      <textarea name="privacy_notes">{{ model.privacy_notes if model else '' }}</textarea>
+    </label>
+  </fieldset>
+{%- endmacro %}
+
+{% block page_header %}
+<header class="page">
+  <div>
+    <h2 class="page__title">Models</h2>
+    <p class="page__lede">Catalog the local and hosted models you want to compare. Pick installed Ollama tags from a dropdown or sync them in one click.</p>
+  </div>
+  <div class="page__actions">
+    <a class="btn btn--primary" href="#add-model">Add model</a>
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<details class="drawer" id="add-model" {% if not models %}open{% endif %}>
+  <summary>Add a model</summary>
+  <div class="drawer__body">
+    <form class="model-form" method="post" action="/models" data-model-form>
+      {{ model_form_fields(providers) }}
+      <div class="cluster">
+        <button type="submit" class="btn btn--primary">Add model</button>
+        <a href="#add-model" class="btn btn--ghost">Reset</a>
+      </div>
+    </form>
+  </div>
+</details>
+
+<h3>Saved models <span class="card__meta">({{ models|length }})</span></h3>
+
+{% if not models %}
+<div class="empty">
+  <h3>No models yet</h3>
+  <p>Add your first model with the form above, or open an Ollama provider and click "Sync all installed".</p>
+</div>
+{% else %}
+<section class="grid">
+  {% for model in models %}
+  {% set provider_label = provider_names.get(model.provider_id, "Provider " ~ model.provider_id) %}
+  <article class="card">
+    <div class="card__header">
+      <div>
+        <h3 class="card__title">{{ model.display_name }}</h3>
+        <div class="card__meta">{{ provider_label }} &middot; <code>{{ model.model_name }}</code></div>
+      </div>
+      <span class="pill {% if model.enabled %}pill--ok{% else %}pill--warn{% endif %}">
+        {% if model.enabled %}Enabled{% else %}Disabled{% endif %}
+      </span>
+    </div>
+
+    <div class="cluster">
+      {% if model.supports_chat %}<span class="chip">Chat</span>{% endif %}
+      {% if model.supports_tools %}<span class="chip">Tools</span>{% endif %}
+      {% if model.supports_vision %}<span class="chip">Vision</span>{% endif %}
+      {% if not (model.supports_chat or model.supports_tools or model.supports_vision) %}
+      <span class="card__meta">No declared capabilities</span>
+      {% endif %}
+    </div>
+
+    <div class="cost">
+      <span class="card__meta">Context</span> {{ model.context_window or "–" }}
+      &middot;
+      <span class="card__meta">Cost</span> ${{ "%.6f"|format(model.input_cost_per_1k) }} in &middot; ${{ "%.6f"|format(model.output_cost_per_1k) }} out per 1K
+    </div>
+
+    {% if model.privacy_notes %}
+    <p class="card__meta">{{ model.privacy_notes }}</p>
+    {% endif %}
+
+    <details class="edit-toggle">
+      <summary><span>Edit details</span></summary>
+      <div class="edit-body">
+        <form class="model-form" method="post" action="/models/{{ model.id }}" data-model-form>
+          {{ model_form_fields(providers, model) }}
+          <div class="cluster">
+            <button type="submit" class="btn btn--primary">Save changes</button>
+          </div>
+        </form>
+      </div>
+    </details>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<script src="/static/models.js" defer></script>
+{% endblock %}

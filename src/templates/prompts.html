@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Prompt Sets</h2>
+<form method="post" action="/prompt-sets">
+  <label>Name <input name="name" required></label>
+  <label>Description <textarea name="description"></textarea></label>
+  <button type="submit">Add Prompt Set</button>
+</form>
+<h2>Prompts</h2>
+<form method="post" action="/prompts">
+  <label>Prompt Set
+    <select name="prompt_set_id">
+      {% for prompt_set in prompt_sets %}
+      <option value="{{ prompt_set.id }}">{{ prompt_set.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Category <input name="category" required></label>
+  <label>Task Goal <input name="task_goal" required></label>
+  <label>Prompt <textarea name="prompt_text" required></textarea></label>
+  <label>Expected Answer <textarea name="expected_answer"></textarea></label>
+  <label>Rubric <textarea name="rubric"></textarea></label>
+  <label>Auto Check Type <input name="auto_check_type" value="none"></label>
+  <label>Auto Check Value <textarea name="auto_check_value"></textarea></label>
+  <label>Tags <input name="tags"></label>
+  <button type="submit">Add Prompt</button>
+</form>
+<table>
+  <tr><th>ID</th><th>Category</th><th>Goal</th><th>Tags</th></tr>
+  {% for prompt in prompts %}
+  <tr><td>{{ prompt.id }}</td><td>{{ prompt.category }}</td><td>{{ prompt.task_goal }}</td><td>{{ prompt.tags }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

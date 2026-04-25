@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ModelMapper</title>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    {% set path = request.url.path if request is defined else "/" %}
+    {% set nav_groups = [
+      ("Setup", [("/providers", "Providers"), ("/models", "Models"), ("/prompts", "Prompts")]),
+      ("Run", [("/runs/new", "New Run"), ("/runs", "History"), ("/compare", "Compare"), ("/benchmarks", "Benchmark")]),
+      ("Insights", [("/", "Dashboard"), ("/guide", "Guide"), ("/decision", "Decision"), ("/exports", "Export")])
+    ] %}
+    <header class="app">
+      <div class="app__inner">
+        <h1>ModelMapper</h1>
+        <nav class="app" aria-label="Primary">
+          {% for group_label, links in nav_groups %}
+            {% if not loop.first %}<span class="nav__sep" aria-hidden="true"></span>{% endif %}
+            {% for href, label in links %}
+              {% set is_active = (href == "/" and path == "/") or (href != "/" and (path == href or path.startswith(href + "/"))) %}
+              <a href="{{ href }}"{% if is_active %} aria-current="page"{% endif %}>{{ label }}</a>
+            {% endfor %}
+          {% endfor %}
+        </nav>
+      </div>
+    </header>
+    <main>
+      {% block page_header %}{% endblock %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

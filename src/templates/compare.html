@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Comparison Table</h2>
+<table>
+  <tr>
+    <th>Model</th><th>Provider</th><th>Status</th><th>Response</th>
+    <th>Latency</th><th>Tokens</th><th>Cost</th><th>Scores</th>
+  </tr>
+  {% for run in runs %}
+  <tr>
+    <td>{{ run.model_display_name }}</td>
+    <td>{{ run.provider_display_name }}</td>
+    <td>{{ run.status }}</td>
+    <td>{{ run.response_text }}</td>
+    <td>{{ run.total_latency_ms or "" }}</td>
+    <td>{{ run.tokens_in }}/{{ run.tokens_out }}</td>
+    <td>{{ run.estimated_cost_usd }}</td>
+    <td>{{ run.accuracy_score or "" }}/{{ run.style_score or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

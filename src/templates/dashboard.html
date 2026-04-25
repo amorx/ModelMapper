@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Dashboard</h2>
+<p>Run consistent prompts across local and hosted models, then keep the results as a personal model guide.</p>
+<p class="metric">Providers: {{ providers|length }}</p>
+<p class="metric">Models: {{ models|length }}</p>
+<p class="metric">Recent runs: {{ runs|length }}</p>
+<h3>Recent Runs</h3>
+<table>
+  <tr><th>ID</th><th>Model</th><th>Status</th><th>Latency</th><th>Cost</th></tr>
+  {% for run in runs %}
+  <tr>
+    <td>{{ run.id }}</td>
+    <td>{{ run.model_display_name }}</td>
+    <td>{{ run.status }}</td>
+    <td>{{ run.total_latency_ms or "" }}</td>
+    <td>{{ run.estimated_cost_usd }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

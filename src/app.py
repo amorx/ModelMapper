@@ -1,21 +1,43 @@
 import logging
+import uuid
+from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from fastapi.staticfiles import StaticFiles
+from starlette.templating import Jinja2Templates
 
-from src.schemas import VaultAccessRequest
+from src.routers import benchmarks, decision, exports, models, prompts, providers, runs
+from src.services.logging import configure_logging
+from src.services.rate_limit import InMemoryRateLimiter
+from src.services.storage import Storage
 
-app = FastAPI()
+configure_logging()
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> Any:
+    application.state.storage.init_db()
+    yield
+
+
+app = FastAPI(title="ModelMapper", version="1.0.0", lifespan=lifespan)
 LOGGER = logging.getLogger(__name__)
+templates = Jinja2Templates(directory="src/templates")
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
+app.state.storage = Storage()
+app.state.storage.init_db()
+app.middleware("http")(InMemoryRateLimiter(limit=60, window_seconds=60))
 
-# 1. Force headers onto EVERY response, including internal errors
+
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, _: Exception) -> JSONResponse:
     headers = {
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "default-src 'self'",
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Cross-Origin-Resource-Policy": "same-origin",
@@ -23,8 +45,7 @@ async def custom_404_handler(request: Request, _: Exception) -> JSONResponse:
     LOGGER.info("Not found path=%s", request.url.path)
     return JSONResponse(status_code=404, content={"detail": "Not Found"}, headers=headers)
 
-# 2. Explicitly define these so they return 200 OK with correct headers
-# Explicitly handle spider targets to prevent 'Non-Storable' 404s
+
 @app.get("/robots.txt", include_in_schema=False)
 def robots() -> Response:
     return Response(content="User-agent: *\nDisallow: /", media_type="text/plain")
@@ -33,37 +54,63 @@ def robots() -> Response:
 def sitemap() -> Response:
     return Response(content='<?xml version="1.0" encoding="UTF-8"?><urlset></urlset>', media_type="application/xml")
 
+
 @app.middleware("http")
-async def add_security_headers(request: Any, call_next: Any) -> Any:  # pragma: no cover
+async def add_security_headers(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = "default-src 'self'"
-    # Hide the fact that we are using Python/Uvicorn
     response.headers["Server"] = "Hidden"
-    # NEW: Fix for WARN-NEW: Non-Storable Content [10049]
-    # Tells browsers and proxies "Do not store this in cache ever"
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
-
-    # NEW: Fix for WARN-NEW: Cross-Origin-Resource-Policy [90004]
-    # Prevents other domains from reading the response (Anti-Spectre/Meltdown defense)
     response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
-
+    response.headers["X-Request-ID"] = request_id
     return response
 
-@app.get("/")
-async def read_root() -> dict[str, str]:
-    return {"status": "Secure Vault Online", "version": "1.0.0"}
 
-def process_vault_entry(data: dict[str, Any]) -> bool:
-    try:
-        request = VaultAccessRequest(**data)
-        LOGGER.info("Access granted for username=%s", request.username)
-        return True
-    except ValidationError as error:
-        LOGGER.warning("Invalid input rejected: %s", error.errors())
-        return False
+@app.get("/")
+async def dashboard(request: Request) -> Response:
+    storage: Storage = request.app.state.storage
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "providers": storage.list_rows("providers"),
+            "models": storage.list_rows("models"),
+            "runs": storage.comparison_rows()[:10],
+        },
+    )
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/status")
+async def api_status() -> dict[str, str]:
+    return {"status": "ModelMapper Online", "version": "1.0.0"}
+
+
+def process_modelmapper_entry(data: dict[str, Any]) -> bool:
+    name = str(data.get("name", ""))
+    valid = 1 <= len(name) <= 120
+    if valid:
+        LOGGER.info("ModelMapper entry accepted")
+    else:
+        LOGGER.warning("Invalid ModelMapper entry rejected")
+    return valid
+
+
+app.include_router(providers.router)
+app.include_router(models.router)
+app.include_router(prompts.router)
+app.include_router(runs.router)
+app.include_router(benchmarks.router)
+app.include_router(decision.router)
+app.include_router(exports.router)

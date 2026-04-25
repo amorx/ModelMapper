@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Personal Model Guide</h2>
+<table>
+  <tr><th>Model</th><th>Privacy</th><th>Recent Notes</th></tr>
+  {% for model in models %}
+  <tr>
+    <td>{{ model.display_name }}</td>
+    <td>{{ model.privacy_notes }}</td>
+    <td>
+      {% for run in runs %}
+        {% if run.model_id == model.id and run.notes %}
+          {{ run.notes }}
+        {% endif %}
+      {% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

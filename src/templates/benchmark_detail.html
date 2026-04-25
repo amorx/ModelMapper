@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block page_header %}
+<header class="page">
+  <div>
+    <h2 class="page__title">Benchmark {{ summary.session.id }}</h2>
+    <p class="page__lede">{{ summary.session.name }} &mdash; status <strong>{{ summary.session.status }}</strong>, {{ summary.session.total_scheduled }} runs scheduled.</p>
+  </div>
+  <div class="page__actions">
+    <a class="btn" href="/benchmarks">All benchmarks</a>
+  </div>
+</header>
+{% endblock %}
+{% block content %}
+<p class="card__meta">Prompt set id {{ summary.session.prompt_set_id }} &middot; repeat {{ summary.session.repeat_count }} &middot; created {{ summary.session.created_at }}{% if summary.session.finished_at %} &middot; finished {{ summary.session.finished_at }}{% endif %}</p>
+{% if summary.session.notes %}
+<p>{{ summary.session.notes }}</p>
+{% endif %}
+
+<h3>Per model rollup</h3>
+<table>
+  <tr>
+    <th>Model</th>
+    <th>Runs</th>
+    <th>Succeeded</th>
+    <th>Auto-check pass rate</th>
+    <th>Avg latency ms</th>
+    <th>Est. cost USD</th>
+    <th>Tokens in / out</th>
+  </tr>
+  {% for row in summary.per_model %}
+  <tr>
+    <td>{{ row.model_display_name }}</td>
+    <td class="num">{{ row.runs }}</td>
+    <td class="num">{{ row.succeeded }}</td>
+    <td class="num">{% if row.autocheck_pass_rate_percent is not none %}{{ row.autocheck_pass_rate_percent }}% ({{ row.with_autocheck }} scored){% else %}n/a{% endif %}</td>
+    <td class="num">{{ row.average_latency_ms }}</td>
+    <td class="num">{{ row.total_estimated_cost_usd }}</td>
+    <td class="num">{{ row.tokens_in }} / {{ row.tokens_out }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h3>All runs</h3>
+<table>
+  <tr>
+    <th>Run</th><th>Prompt</th><th>Model</th><th>Sweep</th><th>Rep</th><th>Status</th><th>Latency</th><th>Auto</th><th>Cost</th>
+  </tr>
+  {% for r in summary.rows %}
+  <tr>
+    <td class="num">{{ r.id }}</td>
+    <td>{{ r.task_goal }}</td>
+    <td>{{ r.model_display_name }}</td>
+    <td><code style="font-size:0.8rem;">{{ r.sweep_name }}</code></td>
+    <td class="num">{{ r.repeat_index }}</td>
+    <td>{{ r.status }}</td>
+    <td class="num">{{ r.total_latency_ms or "" }}</td>
+    <td>{% if r.auto_check_passed is none %}—{% elif r.auto_check_passed %}pass{% else %}fail{% endif %}</td>
+    <td class="num">{{ r.estimated_cost_usd }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

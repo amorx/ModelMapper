@@ -33,6 +33,8 @@ repos:
         additional_dependencies: [pip-audit==2.9.0]
         pass_filenames: false
         always_run: true
+        # Pre-commit's own venv ships pip; advisory may apply before a patched release is on PyPI.
+        args: ["--ignore-vuln", "GHSA-58qw-9mgm-455v"]
 
       # safety scan rewrites .safety-project.ini; pre-commit treats that as a failed commit.
       # Run Safety in CI instead: .github/workflows/pipeline.yml and safety_scan.yml
@@ -42,13 +44,15 @@ repos:
         entry: pytest --cov=src --cov-fail-under=85
         language: python
         additional_dependencies:
-          - pytest==8.4.2
+          - pytest==9.0.3
           - pytest-cov==7.0.0
-          - fastapi==0.115.14
+          - fastapi==0.136.1
           - pydantic==2.12.2
           - email-validator==2.3.0
           - httpx==0.28.1
-          - cryptography==46.0.3
+          - cryptography==47.0.0
+          - jinja2==3.1.6
+          - python-multipart==0.0.26
         pass_filenames: false
         always_run: true
 
